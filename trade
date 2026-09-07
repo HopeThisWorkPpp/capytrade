@@ -65,9 +65,7 @@ local function pickUpPlacedCapybarasAndPlants()
     
     local workspace = game:GetService("Workspace")
     
-    -- Try to find the plot/workspace where items are placed
     for _, obj in ipairs(workspace:GetDescendants()) do
-        -- Look for capybara models/instances
         if (obj:IsA("Model") or obj:IsA("Part")) and obj.Name then
             local isCapy = false
             local isPlant = false
@@ -88,13 +86,36 @@ local function pickUpPlacedCapybarasAndPlants()
                     local itemType = isCapy and "Capybara" or "Plant"
                     print("📍 Found valuable " .. itemType .. ": " .. obj.Name)
                     
-                    -- Move close to the item first
-                    local targetPos = obj:IsA("Part") and obj.Position or (obj:FindFirstChild("HumanoidRootPart") and obj.HumanoidRootPart.Position or obj:FindFirstChild("PrimaryPart") and obj.PrimaryPart.Position or obj.Position)
+                    -- Get position safely
+                    local targetPos = nil
+                    
+                    -- If it's a Part, use its position
+                    if obj:IsA("Part") then
+                        targetPos = obj.Position
+                    -- If it's a Model, try PrimaryPart
+                    elseif obj:IsA("Model") and obj.PrimaryPart then
+                        targetPos = obj.PrimaryPart.Position
+                    -- Otherwise find the first Part child
+                    else
+                        for _, child in ipairs(obj:GetDescendants()) do
+                            if child:IsA("Part") then
+                                targetPos = child.Position
+                                break
+                            end
+                        end
+                    end
+                    
+                    if not targetPos then
+                        print("   ✗ Could not find position for " .. obj.Name)
+                        continue
+                    end
+                    
+                    -- Teleport close to the item
+                    print("   → Teleporting and picking up...")
                     char.HumanoidRootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
                     task.wait(0.3)
                     
                     -- Fire PickUp remote with the object
-                    print("   → Firing PickUp remote...")
                     pcall(function()
                         RS.Remotes.PickUp:FireServer(obj)
                     end)
