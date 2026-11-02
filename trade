@@ -1,4 +1,4 @@
--- Slopix Hub (Tap Simulator), built 2026-10-30 14:22 UTC by build.py. Edit the files in src/, not this one.
+-- Zentynal Hub (Tap Simulator), built 2026-10-30 14:22 UTC by build.py. Edit the files in src/, not this one.
 local __modules, __cache, __loading = {}, {}, {}
 local function use(name)
     local cached = __cache[name]
@@ -192,7 +192,7 @@ local lp = Env.LocalPlayer
 
 local function notify(text, duration)
     pcall(StarterGui.SetCore, StarterGui, "SendNotification", {
-        Title = "Slopix Hub",
+        Title = "Zentynal Hub",
         Text = text,
         Duration = duration or 5,
     })
@@ -260,7 +260,7 @@ return Ui.create({
     icons = use("vendor/icons"),
     footer = "Tap Simulator",
     tabs = {
-        { "Home", "house", "Welcome to Slopix Hub" },
+        { "Home", "house", "Welcome to Zentynal Hub" },
         { "Tapping", "hand", "Auto tap, auto clicker, rebirth, upgrades and the skill tree" },
         { "Pets", "egg", "Hatching, the Shrine blessing, equip, treats and enchanting" },
         { "Craft", "hammer", "Golden, Diamond and Rainbow machines, the Honey Pot and potions" },
@@ -9568,7 +9568,7 @@ local function load(name)
     Env.elevate()
     if not ok then
         Life.errors["load:" .. name] = tostring(result)
-        Ui.notify("Slopix Hub", string.format("%s failed to load; the rest still works.", name), 8)
+        Ui.notify("Zentynal Hub", string.format("%s failed to load; the rest still works.", name), 8)
         warn("[Slopix] " .. name .. ": " .. tostring(result))
     end
     return ok and result or nil
@@ -9608,7 +9608,7 @@ if Env.RuntimeState then
     end)
 end
 
-return "Slopix Hub loaded"
+return "Zentynal Hub loaded"
 end
 __modules["shared/env"] = function(use) -- src/shared/env.luau
 -- Services, the local player, and the executor, the same for every game. Each game's core/env
@@ -9841,7 +9841,7 @@ local Home = {}
 
 -- notes: extra lines shown under the welcome (where you are, what works there).
 function Home.build(notes)
-    local hub = Ui.Tabs.Home:AddGroupbox({ Side = "Left", Name = "Slopix Hub", IconName = "sparkles" })
+    local hub = Ui.Tabs.Home:AddGroupbox({ Side = "Left", Name = "Zentynal Hub", IconName = "sparkles" })
     hub:AddLabel(string.format("Welcome, %s.", Env.LocalPlayer.DisplayName), true)
     for _, note in ipairs(notes or {}) do
         hub:AddLabel(note, true)
@@ -9851,9 +9851,9 @@ function Home.build(notes)
         Text = "Copy Discord invite",
         Func = function()
             if Env.setClipboard and pcall(Env.setClipboard, DISCORD_INVITE) then
-                Ui.notify("Slopix Hub", "Discord invite copied to your clipboard.", 4)
+                Ui.notify("Zentynal Hub", "Discord invite copied to your clipboard.", 4)
             else
-                Ui.notify("Slopix Hub", DISCORD_INVITE, 10)
+                Ui.notify("Zentynal Hub", DISCORD_INVITE, 10)
             end
         end,
     })
@@ -9861,7 +9861,7 @@ function Home.build(notes)
         Text = "Stop all automation",
         Func = function()
             Ui.stopAll()
-            Ui.notify("Slopix Hub", "Everything is switched off.", 3)
+            Ui.notify("Zentynal Hub", "Everything is switched off.", 3)
         end,
     })
     hub:AddToggle("AntiAfk", {
@@ -10443,7 +10443,7 @@ function Settings.build(options)
         end
     end
     if not SaveManager then
-        Ui.notify("Slopix Hub", "Could not load the config manager: " .. tostring(saveError), 6)
+        Ui.notify("Zentynal Hub", "Could not load the config manager: " .. tostring(saveError), 6)
     end
 
     local ThemeManager, themeError = fetch("ThemeManager.lua")
@@ -10474,7 +10474,7 @@ function Settings.build(options)
         end
     end
     if not ThemeManager then
-        Ui.notify("Slopix Hub", "Could not load the theme manager: " .. tostring(themeError), 6)
+        Ui.notify("Zentynal Hub", "Could not load the theme manager: " .. tostring(themeError), 6)
     end
     Env.elevate()
 
@@ -10483,7 +10483,7 @@ function Settings.build(options)
             local ok, err = pcall(SaveManager.LoadAutoloadConfig, SaveManager)
             Env.elevate()
             if not ok then
-                Ui.notify("Slopix Hub", "Autoload failed: " .. tostring(err), 6)
+                Ui.notify("Zentynal Hub", "Autoload failed: " .. tostring(err), 6)
             end
         end
     end
@@ -10530,7 +10530,7 @@ function Ui.create(options)
     end)
 
     Ui.Window = Library:CreateWindow({
-        Title = "Slopix Hub",
+        Title = "Zentynal Hub",
         Footer = options.footer,
         AutoShow = true,
         Center = true,
@@ -10718,7 +10718,7 @@ function Webhook.send(message)
         fields[#fields + 1] = { name = tostring(field[1]), value = tostring(field[2]):sub(1, 1024), inline = field[3] ~= false }
     end
     local body = {
-        username = "Slopix Hub",
+        username = "Zentynal Hub",
         content = id and ("<@" .. id .. ">") or nil,
         allowed_mentions = { parse = {}, users = id and { id } or {} },
         embeds = {
@@ -10774,7 +10774,7 @@ function Webhook.build(tab, options)
             Ui.notify("Webhook", "Paste your webhook URL first.", 4)
         else
             Webhook.send({
-                title = "Slopix Hub is connected",
+                title = "Zentynal Hub is connected",
                 description = "Alerts for " .. gameName .. " will arrive here.",
                 fields = { { "Executor", Env.executor } },
                 ping = true,
@@ -10806,7 +10806,7 @@ end
 return Webhook
 end
 __modules["vendor/icons"] = function(use) -- ../repo/ui/vendor/Lucide.lua
--- Lucide icon registry, bundled for Slopix Hub.
+-- Lucide icon registry, bundled for Zentynal Hub.
 -- Source: https://github.com/mstudio45/lucide-roblox-direct/blob/main/source.lua
 -- Retrieved 2026-10-04; upstream registry version 2026-10-01.
 -- Uses upstream Roblox sprite asset IDs; no executor filesystem or HTTP calls.
@@ -10879,7 +10879,7 @@ end
 return Lucide
 end
 __modules["vendor/ui"] = function(use) -- ../repo/ui/Library.lua
--- Obsidian UI, Crimson restyle for Slopix Hub. Fork of github.com/deividcomsono/Obsidian, rebased on
+-- Obsidian UI, Crimson restyle for Zentynal Hub. Fork of github.com/deividcomsono/Obsidian, rebased on
 -- upstream fb0b7b2 (2026-09-28: nested tabboxes/groupboxes, button icons, sizing fixes).
 local CloneRef = type(cloneref) == "function" and cloneref or clonereference
 local function cloneref(instance: any)
